@@ -66,52 +66,61 @@
 #include "triangle.h"
 #include "tessellation.h"
 
-Face tessellate_face(const TopoDS_Face &aFace)
+Face tessellate_face(const TopoDS_Face& aFace)
 {
-	Face output_face;
+    Face output_face;
 
-	/* This code is based on
-	   https://www.opencascade.com/content/how-get-triangles-vertices-data-absolute-coords-native-opengl-rendering
-	*/
-	TopAbs_Orientation faceOrientation = aFace.Orientation();
+    /* This code is based on
+       https://www.opencascade.com/content/how-get-triangles-vertices-data-absolute-coords-native-opengl-rendering
+       but updated for newer OpenCASCADE API
+    */
+    TopAbs_Orientation faceOrientation = aFace.Orientation();
 
-	TopLoc_Location aLocation;
-	Handle(Poly_Triangulation) aTr = BRep_Tool::Triangulation(aFace,aLocation);
+    TopLoc_Location aLocation;
+    Handle(Poly_Triangulation) aTr = BRep_Tool::Triangulation(aFace, aLocation);
 
-	if(!aTr.IsNull())
-	{
-		const TColgp_Array1OfPnt& aNodes = aTr->Nodes();
-		const Poly_Array1OfTriangle& triangles = aTr->Triangles();
-		const TColgp_Array1OfPnt2d & uvNodes = aTr->UVNodes();
+    if (!aTr.IsNull())
+    {
+        // For newer versions of OpenCASCADE, we need to work with nodes directly
+        int nbNodes = aTr->NbNodes();
+        int nbTriangles = aTr->NbTriangles();
 
-		TColgp_Array1OfPnt aPoints(1, aNodes.Length());
-		for(Standard_Integer i = 1; i < aNodes.Length()+1; i++)
-			aPoints(i) = aNodes(i).Transformed(aLocation);
+        // Create an array to store transformed nodes
+        TColgp_Array1OfPnt aPoints(1, nbNodes);
 
-		Standard_Integer nnn = aTr->NbTriangles();
-		Standard_Integer nt,n1,n2,n3;
+        // Get all nodes and transform them
+        for (Standard_Integer i = 1; i <= nbNodes; i++)
+        {
+            gp_Pnt p = aTr->Node(i);  // Use Node(i) instead of Nodes()
+            aPoints(i) = p.Transformed(aLocation);
+        }
 
-		for( nt = 1 ; nt < nnn+1 ; nt++)
-		{
-			triangles(nt).Get(n1,n2,n3);
+        // Process all triangles
+        for (Standard_Integer nt = 1; nt <= nbTriangles; nt++)
+        {
+            // Use Triangle(nt) to get triangle indices
+            Poly_Triangle triangle = aTr->Triangle(nt);
 
-			if (faceOrientation != TopAbs_Orientation::TopAbs_FORWARD)
-			{
-				int tmp = n1;
-				n1 = n3;
-				n3 = tmp;
-			}
+            int n1, n2, n3;
+            triangle.Get(n1, n2, n3);
 
-			gp_Pnt aPnt1 = aPoints(n1);
-			gp_Pnt aPnt2 = aPoints(n2);
-			gp_Pnt aPnt3 = aPoints(n3);
+            if (faceOrientation != TopAbs_Orientation::TopAbs_FORWARD)
+            {
+                int tmp = n1;
+                n1 = n3;
+                n3 = tmp;
+            }
 
-			const Triangle tr(aPnt1, aPnt2, aPnt3);
-			output_face.addTriangle(tr);
-		}
-	}
+            gp_Pnt aPnt1 = aPoints(n1);
+            gp_Pnt aPnt2 = aPoints(n2);
+            gp_Pnt aPnt3 = aPoints(n3);
 
-	return output_face;
+            const Triangle tr(aPnt1, aPnt2, aPnt3);
+            output_face.addTriangle(tr);
+        }
+    }
+
+    return output_face;
 }
 
 
